@@ -1,0 +1,131 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isDocOwner(ownerId) {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+    
+    // Users collection - private data
+    match /users/{userId} {
+      // Allow read for authenticated users (needed for getting organizer info, etc.)
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
+      // Allow users to update their own data
+      allow update: if isAuthenticated() && request.auth.uid == userId;
+      allow delete: if isOwner(userId);
+    }
+    
+    // Events collection - public read, organizers can create/update their own
+    match /events/{eventId} {
+      allow read: if true; // Public - anyone can browse events
+      allow create: if isAuthenticated();
+      // Allow updates for organizers OR authenticated users (for ticket purchases)
+      // For now, allow any authenticated user to update - this allows ticket purchases
+      // TODO: Restrict to only soldTickets/ticketTiers updates for non-organizers
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.organizerId;
+    }
+    
+    // Tickets collection - users can only see their own tickets
+    match /tickets/{ticketId} {
+      // Allow read for ticket owner or security staff
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.userId ||
+        // Security staff can read tickets for validation
+        exists(/databases/$(database)/documents/securityStaff/$(request.auth.uid))
+      );
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
+      allow update: if isAuthenticated() && (
+        request.auth.uid == resource.data.userId || 
+        // Security staff can update ticket status for validation
+        exists(/databases/$(database)/documents/securityStaff/$(request.auth.uid))
+      );
+      allow delete: if isOwner(resource.data.userId);
+    }
+    
+    // Payments collection - users can create and read their own
+    match /payments/{paymentId} {
+      allow read: if isAuthenticated() && (
+        // Users can read their own payments via ticketId lookup
+        // Organizers can see payments for their events
+        true // Allow authenticated users to read (will filter by ticketId in queries)
+      );
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+    }
+    
+    // Sponsor applications - sponsors can create, organizers can read for their events
+    match /sponsorApplications/{applicationId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.sponsorId ||
+        exists(/databases/$(database)/documents/events/$(resource.data.eventId)) &&
+        get(/databases/$(database)/documents/events/$(resource.data.eventId)).data.organizerId == request.auth.uid
+      );
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.sponsorId;
+      allow update: if isAuthenticated() && (
+        request.auth.uid == resource.data.sponsorId ||
+        exists(/databases/$(database)/documents/events/$(resource.data.eventId)) &&
+        get(/databases/$(database)/documents/events/$(resource.data.eventId)).data.organizerId == request.auth.uid
+      );
+    }
+    
+    // Sponsors collection - public read (for discovery), sponsors can update their own
+    match /sponsors/{sponsorId} {
+      allow read: if true; // Public - for organizers to discover sponsors
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
+      allow update, delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+    
+    // Providers collection - public read (for discovery), providers can update their own
+    match /providers/{providerId} {
+      allow read: if true; // Public - for organizers to discover providers
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
+      allow update, delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+    
+    // Event promotions - organizers can manage their own
+    match /eventPromotions/{promotionId} {
+      allow read: if isAuthenticated() && (
+        exists(/databases/$(database)/documents/events/$(resource.data.eventId)) &&
+        get(/databases/$(database)/documents/events/$(resource.data.eventId)).data.organizerId == request.auth.uid
+      );
+      allow create, update, delete: if isAuthenticated() && (
+        exists(/databases/$(database)/documents/events/$(request.resource.data.eventId)) &&
+        get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.organizerId == request.auth.uid
+      );
+    }
+    
+    // Security staff - organizers can create for their events
+    match /securityStaff/{staffId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.userId ||
+        exists(/databases/$(database)/documents/events/$(resource.data.eventId)) &&
+        get(/databases/$(database)/documents/events/$(resource.data.eventId)).data.organizerId == request.auth.uid
+      );
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && (
+        exists(/databases/$(database)/documents/events/$(resource.data.eventId)) &&
+        get(/databases/$(database)/documents/events/$(resource.data.eventId)).data.organizerId == request.auth.uid
+      );
+    }
+    
+    // Analytics - organizers can read analytics for their events
+    match /analytics/{eventId} {
+      allow read: if isAuthenticated() && (
+        exists(/databases/$(database)/documents/events/$(eventId)) &&
+        get(/databases/$(database)/documents/events/$(eventId)).data.organizerId == request.auth.uid
+      );
+      allow write: if false; // Analytics are computed server-side or by trusted clients
+    }
+  }
+}

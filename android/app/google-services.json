@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "253112985837",
+    "project_id": "tktt-6454a",
+    "storage_bucket": "tktt-6454a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:253112985837:android:bf21e29287e3ac28aac4e4",
+        "android_client_info": {
+          "package_name": "com.mycompany.CounterApp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAeETh-hri8bpuBvAQTJZq1KcWsM5OTnJo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
